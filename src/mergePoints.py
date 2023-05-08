@@ -1,24 +1,31 @@
 import lzma
+from math import sqrt
 import pandas as pd
 from geopy import Point, distance
 import geojson
 import matplotlib.pyplot as plt
 import numpy as np
+import pmdarima
 from scipy import stats
 from elasticsearch import Elasticsearch, helpers
 import util
 from pandarallel import pandarallel
 import numpy as np
+from statsmodels.tsa.arima.model import ARIMA
+from statsmodels.tsa.stattools import adfuller
+from statsmodels.tsa.seasonal import seasonal_decompose
+from sklearn.metrics import mean_squared_error
+from pmdarima.arima import auto_arima
 
 
-index = "testdumpveiculos3"
-
-pandarallel.initialize(progress_bar=True, nb_workers=5)
+index = "testdumpveiculos4"
 
 es = Elasticsearch(
-    hosts=["http://192.168.1.15:9200"],
-    basic_auth=("elastic", "!@ContaElastic"),
+    hosts=["https://elastic.tccurbstads.com:443"],
+    basic_auth=("elastic", "!@ContaElastic")
 )
+
+pandarallel.initialize(progress_bar=True, nb_workers=5)
 
 
 def isPointInShape(row):
@@ -84,13 +91,13 @@ def isPointInShape(row):
     return finalPercentage
 
 
-def mergePoints(cod):
+def mergePoints():
     file = lzma.open(
-        "./data/veiculos/2023_04_17_veiculos.json.xz", mode="rt").read()
+        "./data/veiculos/2023_05_03_veiculos.json.xz", mode="rt").read()
 
     df = pd.read_json(file, lines=True)
 
-    df = df[df['COD_LINHA'] == cod]
+    df = df[df['COD_LINHA'] == '469']
 
     df["LAT"].replace(",", ".", regex=True, inplace=True)
     df["LAT"] = df["LAT"].apply(pd.to_numeric)
@@ -116,40 +123,35 @@ def mergePoints(cod):
 
     df = df[df['percentage'].notna()]
 
-    df['point'] = df.apply(lambda row: geojson.Point((
-        row['LAT'], row['LON'])), axis=1)
+    df.set_index('DTHR', inplace=True)
 
-    dictThing = df.to_dict(orient="records")
+    model = pmdarima.auto_arima(df["percentage"], seasonal=True,
+                                m=24*30, suppress_warnings=True)
 
-    es = Elasticsearch(
-        hosts=["https://elastic.tccurbstads.com:443"],
-        basic_auth=("elastic", "!@ContaElastic")
-    )
+    print(model.summary())
 
-    list(helpers.parallel_bulk(es, dictThing, index=index))
+    n_forecast = 5  # Number of steps to predict
+    forecast = model.predict(n_periods=n_forecast)
+    print(forecast)
 
-
-mapping = {
-    "properties": {
-        "VEIC": {"type": "keyword"},
-        "LAT": {"type": "float"},
-        "LON": {"type": "float"},
-        "DTHR": {"type": "date"},
-        "COD_LINHA": {"type": "keyword"},
-        "point": {"type": "geo_point"},
-        "direction": {"type": "float"},
-        "percentage": {"type": "float"}
-    }
-}
-
-# es.indices.create(index=index, mappings=mapping)
-
-es.indices.refresh(index=index)
-
-file = lzma.open(
-    "./data/veiculos/2023_04_17_veiculos.json.xz", mode="rt").read()
-df = pd.read_json(file, lines=True)
-df = df['COD_LINHA'].unique()
-
-for cod in df:
-    mergePoints(cod)
+    # dictThing = df.to_dict(orient="records")
+    # es = Elasticsearch(
+    #     hosts=["http://192.168.1.15:9200"],
+    #     basic_auth=("elastic", "!@ContaElastic"),
+    # )
+    # mapping = {gg
+    #     "properties": {
+    #         "VEIC": {"type": "keyword"},
+    #         "LAT": {"type": "float"},
+    #         "LON": {"type": "float"},
+    #         "DTHR": {"type": "date"},
+    #         "COD_LINHA": {"type": "keyword"},
+    #         "point": {"type": "geo_point"},
+    #         "direction": {"type": "float"},
+    #         "percentage": {"type": "float"}
+    #     }
+    # }
+    # es.indices.create(index=index, mappings=mapping)
+    # es.indices.refresh(index=index)
+    # list(helpers.parallel_bulk(es, dictThing, index=index))
+mergePoints()

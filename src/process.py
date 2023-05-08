@@ -6,6 +6,7 @@ import numpy as np
 from scipy import stats
 from elasticsearch import Elasticsearch, helpers
 import util
+import pymongo
 
 
 def parseShapeFile(filePath):
@@ -149,26 +150,35 @@ def parseShapeFile1(filePath):
 
     dictThing = df.to_dict(orient='records')
 
-    es = Elasticsearch(
-        hosts=["https://elastic.tccurbstads.com:443"],
-        basic_auth=("elastic", "!@ContaElastic")
-    )
+    client = pymongo.MongoClient(
+        "mongodb://contaMongo:!%40MongoConta@tccurbstads.com:27017/?authMechanism=DEFAULT")
 
-    index = "testshape"
+    db = client["urbs"]
 
-    mapping = {
-        "properties": {
-            "COD": {"type": "keyword"},
-            "SHP": {"type": "keyword"},
-            "coordinate": {"type": "geo_shape"}
-        }
-    }
+    collection = db["shapes"]
 
-    es.indices.create(index=index, mappings=mapping)
+    collection.insert_many(dictThing)
 
-    es.indices.refresh(index=index)
+    # es = Elasticsearch(
+    #     hosts=["https://elastic.tccurbstads.com:443"],
+    #     basic_auth=("elastic", "!@ContaElastic")
+    # )
 
-    helpers.bulk(es, dictThing, index=index)
+    # index = "testshape"
+
+    # mapping = {
+    #     "properties": {
+    #         "COD": {"type": "keyword"},
+    #         "SHP": {"type": "keyword"},
+    #         "coordinate": {"type": "geo_shape"}
+    #     }
+    # }
+
+    # es.indices.create(index=index, mappings=mapping)
+
+    # es.indices.refresh(index=index)
+
+    # helpers.bulk(es, dictThing, index=index)
 
 
 parseShapeFile1('./data/shape.json')
