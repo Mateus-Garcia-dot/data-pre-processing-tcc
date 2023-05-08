@@ -1,0 +1,7 @@
+elasticsearch
+geojson
+geopy
+plotly
+pandas
+matplotlib
+scipy
